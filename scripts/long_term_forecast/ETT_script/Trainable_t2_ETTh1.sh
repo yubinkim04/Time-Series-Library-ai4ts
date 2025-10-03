@@ -1,7 +1,9 @@
 export CUDA_VISIBLE_DEVICES=0
 
-model_name=Transformer
+model_name=Trainable_t2
 
+
+# 96
 python -u run.py \
   --task_name long_term_forecast \
   --is_training 1 \
@@ -20,9 +22,15 @@ python -u run.py \
   --enc_in 7 \
   --dec_in 7 \
   --c_out 7 \
+  --d_model 16 \
+  --d_ff 32 \
   --des 'Exp' \
-  --itr 1
+  --itr 1 \
+  --train_epochs 50 \
+  --dropout 0.3 \
+  --patience 10
 
+# 192
 python -u run.py \
   --task_name long_term_forecast \
   --is_training 1 \
@@ -41,9 +49,15 @@ python -u run.py \
   --enc_in 7 \
   --dec_in 7 \
   --c_out 7 \
+  --d_model 16 \
+  --d_ff 32 \
   --des 'Exp' \
-  --itr 1
+  --itr 1 \
+  --train_epochs 50 \
+  --dropout 0.1 \
+  --patience 10
 
+# 336
 python -u run.py \
   --task_name long_term_forecast \
   --is_training 1 \
@@ -62,9 +76,15 @@ python -u run.py \
   --enc_in 7 \
   --dec_in 7 \
   --c_out 7 \
+  --d_model 16 \
+  --d_ff 32 \
   --des 'Exp' \
-  --itr 1
+  --itr 1 \
+  --train_epochs 50 \
+  --dropout 0.1 \
+  --patience 10
 
+# 720
 python -u run.py \
   --task_name long_term_forecast \
   --is_training 1 \
@@ -83,5 +103,10 @@ python -u run.py \
   --enc_in 7 \
   --dec_in 7 \
   --c_out 7 \
+  --d_model 16 \
+  --d_ff 32 \
   --des 'Exp' \
-  --itr 1
+  --itr 1 \
+  --train_epochs 50 \
+  --dropout 0.1 \
+  --patience 10
