@@ -14,7 +14,7 @@ DATA_NAME="ETTh2"
 FEATURES="M"
 
 # We'll sweep these because ETTh2 often wants different horizons/context
-SEQ_LENS=(96 192 336 512)
+SEQ_LENS=(96 192 336 720)
 LABEL_LENS=(48)
 
 # Non-tuned fixed bits

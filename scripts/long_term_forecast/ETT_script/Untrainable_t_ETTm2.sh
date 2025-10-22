@@ -2,14 +2,14 @@
 set -Eeuo pipefail
 
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
-model_name="${1:-Trainable_t}"
+model_name="${1:-Untrainable_t}"
 
 ROOT="./dataset/ETT-small"
-DATA_FILE="ETTm1.csv"
-DATA_NAME="ETTm1"
+DATA_FILE="ETTm2.csv"
+DATA_NAME="ETTm2"
 FEATURES="M"
 
-# 15-min data: 1 day = 96 steps; keep your proven grid
+# Same grid; ETTm2 may like a touch more regularization—handled via +0.1 dropout delta
 SEQ_LENS=(96 192 336 720)
 LABEL_LENS=(48)
 
@@ -24,7 +24,6 @@ PATIENCE=10
 
 PRED_LENS=(96 192 336 720)
 
-# From your ETTh1 “top-7”
 BASE_CONFIGS=(
 "6 16 256 0.3 0.00005 2"
 "6 16 32  0.1 0.0002  4"
@@ -92,7 +91,7 @@ for cfg in "${BASE_CONFIGS[@]}"; do
               --c_out ${C_OUT} \
               --d_model ${D_MODEL} \
               --d_ff ${D_FF} \
-              --des "ettm1_targeted_sweep" \
+              --des "ettm2_targeted_sweep" \
               --itr 1 \
               --train_epochs ${TRAIN_EPOCHS} \
               --dropout ${DROPOUT} \
@@ -106,4 +105,4 @@ for cfg in "${BASE_CONFIGS[@]}"; do
   done
 done
 
-echo "✅ ETTm1 targeted sweep complete."
+echo "✅ ETTm2 targeted sweep complete."

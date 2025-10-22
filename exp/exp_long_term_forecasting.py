@@ -33,7 +33,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         return data_set, data_loader
 
     def _select_optimizer(self):
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate, weight_decay=1e-5)
+        #model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate, weight_decay=1e-5)
+        model_optim = optim.AdamW(self.model.parameters(), lr=self.args.learning_rate, weight_decay=0.01)
         return model_optim
 
     def _select_criterion(self):
@@ -165,6 +166,14 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                # Random dropping implementation
+                drop_mask = None
+                random_drop_rate = torch.rand(1).item()
+                drop_mask = torch.rand(1, 1, batch_x.shape[2], device=batch_x.device) < 1-random_drop_rate
+                batch_x = batch_x.masked_fill(drop_mask, 0)
+                batch_y = batch_y.masked_fill(drop_mask, 0)
+                batch_x_mark = batch_x_mark.masked_fill(torch.rand(1, 1, batch_x_mark.shape[2], device=batch_x_mark.device) < 1-random_drop_rate, 0)
 
                 # encoder - decoder
                 if self.args.use_amp:
