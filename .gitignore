@@ -166,3 +166,9 @@ result_anomaly_detection.txt
 scripts/augmentation/
 run_anylearn.py
 environment.txt
+
+# PACE cluster specific files
+*.sbatch
+
+# macOS specific files
+.DS_Store
