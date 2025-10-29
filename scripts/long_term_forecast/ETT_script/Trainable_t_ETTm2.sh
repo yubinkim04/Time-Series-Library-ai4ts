@@ -10,7 +10,7 @@ DATA_NAME="ETTm2"
 FEATURES="M"
 
 # Same grid; ETTm2 may like a touch more regularization—handled via +0.1 dropout delta
-SEQ_LENS=(96 192 336 512)
+SEQ_LENS=(96 192 336 720)
 LABEL_LENS=(48)
 
 D_LAYERS=1
