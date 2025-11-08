@@ -172,3 +172,6 @@ environment.txt
 
 # macOS specific files
 .DS_Store
+
+# IE Compute specific
+*.cmd
