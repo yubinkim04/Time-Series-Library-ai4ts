@@ -5,14 +5,14 @@ set -Eeuo pipefail
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
 # --------- Static config ---------
-model_name="${1:-Untrainable_t}"
+model_name="${1:-no_rope_abl}"
 
 ROOT="./dataset/ETT-small"
 DATA_FILE="ETTm2.csv"
 DATA_NAME="ETTm2"
 
 FEATURES="M"
-SEQ_LENS=(96 192 336 720)
+SEQ_LENS=(336)
 LABEL_LEN=48
 
 # Non-tuned fixed bits
@@ -30,12 +30,7 @@ PRED_LENS=(96 192 336 720)
 
 # --------- Top-7 configs: el dm dff dropout lr n_heads ---------
 CONFIGS=(
-"6 16 256 0.3 0.00005 2"
-"6 16 32  0.1 0.0002  4"
 "6 16 32  0.1 0.0001  4"
-"6 8  128 0.1 0.0002  2"
-"5 32 128 0.1 0.0001  16"
-"6 32 64  0.1 0.00005 8"
 )
 
 echo "Starting top-7 sweep for ${DATA_NAME} on model=${model_name}"

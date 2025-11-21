@@ -269,7 +269,7 @@ class CausalSelfAttention(nn.Module):
             # nonrope_log_mean=getattr(config, "nonrope_log_mean", -3.0),
             # nonrope_log_std=getattr(config, "nonrope_log_std", 0.02),
             # nonrope_rho_std=getattr(config, "nonrope_rho_std", 0.02),
-            learnable_clock=True,
+            learnable_clock=False,
         )
         # ------------------------------------------------------------
  

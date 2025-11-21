@@ -5,14 +5,14 @@ set -Eeuo pipefail
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
 # --------- Static config ---------
-model_name="${1:-Trainable_t2}"
+model_name="${1:-Untrainable_t2}"
 
 ROOT="./dataset/ETT-small"
 DATA_FILE="ETTh1.csv"
 DATA_NAME="ETTh1"
 
 FEATURES="M"
-SEQ_LENS=(192 336 720)
+SEQ_LENS=(336)
 LABEL_LEN=48
 
 # Non-tuned fixed bits

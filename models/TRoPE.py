@@ -6,10 +6,6 @@ import math
 import numpy as np
 from typing import Tuple
 
-# ================================================================
-# Symplectic Positional Embedding (IDENTICAL to your second code)
-# ================================================================
-
 @torch.compiler.disable
 @torch.no_grad()
 def init_nonrope_bands(module, L_max: int, rho_std: float = 0.03):
@@ -51,7 +47,7 @@ def _apply_J2_block(u: torch.Tensor) -> torch.Tensor:
 def apply_J(x: torch.Tensor) -> torch.Tensor:
     xb = _pairwise_blocks(x)
     yb = _apply_J2_block(xb)
-    return yb.reshape_as(x)  # yb.view_as(x)
+    return yb.reshape_as(x)#yb.view_as(x)
 
 def _init_base_omegas(head_dim: int, base: int = 10_000) -> torch.Tensor:
     assert head_dim % 2 == 0
@@ -86,7 +82,7 @@ def apply_symplectic_pos_emb(
     beta  = beta.reshape(H, K)
     rho = rho.reshape(H, K)
     # rho   = torch.clamp(rho, -rho_clip, rho_clip)
-    clipping = rho_clip * torch.ones_like(rho)
+    clipping = rho_clip*torch.ones_like(rho)
     rho = torch.maximum(torch.minimum(rho, clipping), -clipping)
 
     a = torch.exp(alpha)
@@ -146,7 +142,7 @@ class SymplecticPE(nn.Module):
         nonrope_log_mean: float = -3.0,
         nonrope_log_std: float = 0.02,
         nonrope_rho_std: float = 0.02,
-        learnable_clock: bool = True,
+        learnable_clock = True
     ):
         super().__init__()
         assert head_dim % 2 == 0, "head_dim must be even"
@@ -226,10 +222,87 @@ class SymplecticPE(nn.Module):
         k_pos = self.forward(k, is_key=True,  transpose=False, clock=clock)
         return q_pos, k_pos
 
-# ================================================================
-# Rest of your model, now USING SymplecticPE instead of RoPE
-# ================================================================
+class RotaryPositionalEmbedding(nn.Module):
+    """
+    Rotary positional embedding (RoPE) for Q/K.
+    Expects q, k of shape (batch, heads, seq_len, dim).
+    """
 
+    def __init__(self, dim, base: float = 10000.0, trainable_flag=False, n_head=None):
+        super().__init__()
+        assert dim % 2 == 0, "RoPE dimension must be even"
+        self.dim = dim
+        self.n_head = n_head
+        self.base = base
+        self.register_buffer("cos_cached", None, persistent=False)
+        self.register_buffer("sin_cached", None, persistent=False)
+        self.trainable_flag = trainable_flag
+        if trainable_flag:
+            self.trainable_t = nn.Linear(self.dim * self.n_head, n_head)
+        inv_freq = (
+                1.0
+                / (
+                    self.base
+                    ** (torch.arange(0, self.dim, 2) / self.dim)
+                )
+            )
+        #self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Parameter(inv_freq)
+
+    @staticmethod
+    def _rotate_half(x):
+        x_even, x_odd = x[..., ::2], x[..., 1::2]
+        x_rot = torch.stack((-x_odd, x_even), dim=-1)
+        return x_rot.flatten(-2)
+
+    def _build_cache(self, seq_len: int, device, dtype):
+        t = torch.arange(seq_len, device=device, dtype=dtype)  # (L, )
+        freqs = torch.einsum("s,f->sf", t, self.inv_freq)
+        cos = torch.cos(freqs).repeat_interleave(2, dim=-1)
+        sin = torch.sin(freqs).repeat_interleave(2, dim=-1)
+        self.cos_cached = cos.unsqueeze(0).unsqueeze(0)
+        self.sin_cached = sin.unsqueeze(0).unsqueeze(0)
+
+    def build_cos_sin_trainable(self, x):
+        B, L, D = x.shape
+        t = self.trainable_t(x)  # (B, L, h)
+        t = F.softplus(t)
+        t = t.cumsum(dim=1)  # (B, L, h)
+        freqs = torch.einsum("bsh,f->bhsf", t, self.inv_freq)
+        cos = torch.cos(freqs).repeat_interleave(2, dim=-1)  # (B, h, L, d)
+        sin = torch.sin(freqs).repeat_interleave(2, dim=-1)  # (B, h, L, d)
+        return cos, sin
+
+    def _get_cos_sin(self, seq_len: int, device, dtype):
+        need_build = (
+            self.cos_cached is None
+            or self.cos_cached.size(2) < seq_len
+            or self.cos_cached.device != device
+            or self.cos_cached.dtype != dtype
+        )
+        if need_build:
+            self._build_cache(seq_len, device, dtype)
+        return self.cos_cached[..., :seq_len, :], self.sin_cached[..., :seq_len, :]
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor, x=None, start_index: int = 0):
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        b, h, s, d = q.shape
+        assert d == self.dim, f"Expected dim {self.dim}, got {d}"
+        device, dtype = q.device, q.dtype
+        if self.trainable_flag:
+            assert x is not None, "x should not be None when trainable_flag=True"
+            cos, sin = self.build_cos_sin_trainable(x)
+        else:
+            cos, sin = self._get_cos_sin(start_index + s, device, dtype)
+        cos = cos[:, :, start_index:start_index + s, :]
+        sin = sin[:, :, start_index:start_index + s, :]
+        q_rot = (q * cos) + (self._rotate_half(q) * sin)
+        k_rot = (k * cos) + (self._rotate_half(k) * sin)
+        return q_rot.transpose(1, 2), k_rot.transpose(1, 2)
+
+ 
+ 
 class LayerNorm(nn.Module):
     """LayerNorm but with an optional bias"""
     def __init__(self, ndim, bias):
@@ -255,23 +328,14 @@ class CausalSelfAttention(nn.Module):
         self.dropout = config.dropout
         self.is_causal = config.is_causal
  
-        # --- replaced RotaryPositionalEmbedding with SymplecticPE ---
-        self.rope = SymplecticPE(
-            n_head=self.n_head,
-            head_dim=config.n_embd // self.n_head,
-            base=10_000,
-            learnable=True,
-            share_mode=getattr(config, "share_mode", "per_head_block"),
-            fix_rope_base=True,
-            apply_J_for_keys_by_default=True,
-            nonrope_init=getattr(config, "nonrope_init", False),
-            # if you later expose these via args, pull from config the same way:
-            # nonrope_log_mean=getattr(config, "nonrope_log_mean", -3.0),
-            # nonrope_log_std=getattr(config, "nonrope_log_std", 0.02),
-            # nonrope_rho_std=getattr(config, "nonrope_rho_std", 0.02),
-            learnable_clock=True,
-        )
-        # ------------------------------------------------------------
+        # self.rope = RotaryPositionalEmbedding(
+        #     config.n_embd // self.n_head,
+        #     n_head=self.n_head,
+        #     trainable_flag=True,  # <-- start with fixed RoPE
+        # )
+
+        self.rope = SymplecticPE(n_head=self.n_head, head_dim=config.n_embd // self.n_head, base=10000, learnable=True, share_mode="per_head_block",
+                                 fix_rope_base=True, apply_J_for_keys_by_default=True, nonrope_init=False, learnable_clock=True)
  
         self.flash = hasattr(torch.nn.functional, "scaled_dot_product_attention")
         if not self.flash:
@@ -285,16 +349,12 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size()
         q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
-
-        # shapes: (B, T, H, D)
+ 
         k = k.view(B, T, self.n_head, C // self.n_head)
         q = q.view(B, T, self.n_head, C // self.n_head)
-
-        # Symplectic position embedding (identical usage to your second code)
-        q, k = self.rope.rpe(q, k, clock_x=x)   # q,k: (B, T, H, D)
-        q, k = q.transpose(1, 2), k.transpose(1, 2)  # (B, H, T, D)
-
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)  # (B, H, T, D)
+        q, k = self.rope.rpe(q, k, x)
+        q, k = q.transpose(1, 2), k.transpose(1, 2)
+        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
  
         if self.flash:
             y = torch.nn.functional.scaled_dot_product_attention(
@@ -339,23 +399,19 @@ class Transformer(nn.Module):
         self.lns = nn.ModuleList([nn.LayerNorm(config.n_embd, bias=config.bias) for _ in range(config.n_layer)])
         self.mlps = nn.ModuleList([MLP(config) for _ in range(config.n_layer)])
  
-        self.input_proj = nn.Linear(config.n_channel, config.n_embd)
         self.input_norm = nn.LayerNorm(config.n_embd)
         self.output_norm = nn.LayerNorm(config.n_embd)
-        self.output_proj = nn.Linear(config.n_embd, config.n_channel)
  
         self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
  
     def forward(self, x):
         B, L, C = x.shape
-        x = self.input_proj(x)
         x = x + self.pos_emb[:, :L]
         x = self.input_norm(x)
         for attn, pn, ln, mlp in zip(self.attn, self.pns, self.lns, self.mlps):
             x = x + attn(pn(x))
             x = x + mlp(ln(x))
         x = self.output_norm(x)
-        x = self.output_proj(x)
         return x
  
  
@@ -363,7 +419,7 @@ class Model(nn.Module):
     def __init__(self, configs):
         super().__init__()
         transformer_config = SimpleNamespace(
-            block_size=1024,
+            block_size=configs.seq_len+configs.pred_len,
             n_layer=configs.e_layers,
             n_head=configs.n_heads,
             n_embd=configs.d_model,
@@ -371,19 +427,30 @@ class Model(nn.Module):
             bias=True,
             is_causal=False,
             n_channel=configs.enc_in,
-            d_ff=configs.d_ff,
-            # >>> NEW: SyPE config coming from run.py / args <<<
-            share_mode=getattr(configs, "share_mode", "per_head_block"),
-            nonrope_init=getattr(configs, "nonrope_init", False)
+            d_ff=configs.d_ff
         )
+        self.pred_len = configs.pred_len
         self.model = Transformer(transformer_config)
-        #self.forecast_layer = nn.Linear(configs.seq_len, configs.pred_len)
-        self.forecast_layer = nn.Sequential(
-            nn.Linear(configs.seq_len, 512),
-            nn.GELU(),
-            nn.Dropout(configs.dropout),
-            nn.Linear(512, configs.pred_len),
-        )
+        #self.input_proj = nn.Parameter(torch.randn(1, configs.d_model) * math.sqrt(6 / (1+configs.d_model))) # nn.Linear(1, configs.d_model)
+        self.input_proj = nn.Sequential(nn.Linear(1, 4*configs.d_model),
+                                        nn.GELU(),
+                                        nn.Dropout(configs.dropout),
+                                        nn.Linear(4*configs.d_model, configs.d_model//2))
+        # self.input_proj_context = nn.Parameter(torch.zeros(configs.enc_in, configs.d_model)) # nn.Linear(configs.enc_in, configs.d_model)
+        self.input_proj_context = nn.Sequential(nn.Linear(configs.enc_in, 4*configs.d_model),
+                                        nn.GELU(),
+                                        nn.Dropout(configs.dropout),
+                                        nn.Linear(4*configs.d_model, configs.d_model//2))
+        self.channel_identifier = nn.Parameter(torch.zeros(1, configs.enc_in, 1, configs.d_model))
+        self.out_token_identifier = nn.Parameter(0.02*torch.randn(1, configs.pred_len, configs.d_model))
+        # self.output_proj = nn.Linear(configs.d_model, configs.enc_in)
+
+        # self.forecast_layer = nn.Linear(configs.seq_len, configs.pred_len)
+        self.forecast_layer = nn.Sequential(nn.Linear(configs.seq_len, 2*configs.pred_len),
+                                            nn.GELU(),
+                                            nn.Dropout(configs.dropout),
+                                            nn.Linear(2*configs.pred_len, configs.pred_len))
+        self.out_proj = nn.Parameter(torch.zeros(configs.d_model//2, 1)) # nn.Linear(configs.d_model, 1)
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -395,10 +462,38 @@ class Model(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
  
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, mask=None):
-        # x_enc: (B, L, D)
-        mean, std = x_enc.mean(dim=1, keepdim=True), x_enc.std(dim=1, keepdim=True) + 1e-8
-        x_enc = (x_enc - mean) / std
-        x_output = self.model(x_enc)
-        x_output = self.forecast_layer((x_enc + x_output).permute(0, 2, 1)).permute(0, 2, 1)
+        B, L, C = x_enc.size()
+        mean, std = x_enc[:, [-1], :], x_enc.std(dim=1, keepdim=True) + 1e-8
+        x_enc = (x_enc - mean) / std      # B L_I C
+        prefill = self.forecast_layer(x_enc.permute(0, 2, 1))  # B C L_P
+        prefill_input = prefill.reshape(B*C, self.pred_len, 1) # BC L_P 1
+        prefill_input = self.input_proj(prefill_input)         # BC L_P D/2
+        prefill_context = self.input_proj_context(prefill.permute(0, 2, 1))  # B L_P D/2
+        prefill_context = prefill_context.unsqueeze(1).expand(-1, C, -1, -1).reshape(B*C, self.pred_len, -1)  # BC L_P D/2
+
+        x_input = x_enc.permute(0, 2, 1)  # B C L_I
+        x_input = x_input.reshape(B*C, L, 1) # BC L_I 1
+        x_input = self.input_proj(x_input)   # BC L_I D/2
+        x_context = self.input_proj_context(x_enc)  # B L_I D/2
+        x_context = x_context.unsqueeze(1).expand(-1, C, -1, -1).reshape(B*C, L, -1) # BC L_I D
+        x = torch.cat([x_input, x_context], dim=-1)  # BC L_I D
+        # out_tokens_input = self.input_proj(torch.zeros(1, device=x_enc.device))    # D/2
+        # out_tokens_context = self.input_proj_context(torch.zeros(C, device=x_enc.device)) # D/2
+        out_tokens = torch.cat([prefill_input, prefill_context], dim=-1) + self.out_token_identifier # BC L_P D #.unsqueeze(0).unsqueeze(0).expand(B*C, self.pred_len, -1) #
+        x_channel_identifier = self.channel_identifier.expand(B, -1, -1, -1).reshape(B*C, 1, -1)
+        x = torch.cat([x, out_tokens], dim=1) + x_channel_identifier   # BC L_I+L_P D
+
+        x_output = self.model(x)       # BC L_I+L_P D
+
+        x_output = x_output[:, -self.pred_len:]   # BC L_P D
+
+        x_output = x_output.reshape(B, C, self.pred_len, -1) # B C L_P D
+        x_output, _ = x_output.chunk(2, dim=-1) # B C L_P D/2
+
+        x_output = x_output @ self.out_proj               # B C L_P 1
+        x_output = x_output.squeeze(-1).permute(0, 2, 1)  # B L_P C
+        x_output = x_output + prefill.permute(0, 2, 1)
         x_output = x_output * std + mean
         return x_output  # (B, L_P, C)
+ 
+ 

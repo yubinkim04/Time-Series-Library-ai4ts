@@ -8,11 +8,11 @@ export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 model_name="${1:-Trainable_t2}"
 
 ROOT="./dataset/ETT-small"
-DATA_FILE="ETTh1.csv"
-DATA_NAME="ETTh1"
+DATA_FILE="ETTm1.csv"
+DATA_NAME="ETTm1"
 
 FEATURES="M"
-SEQ_LENS=(192 336 720)
+SEQ_LENS=(720 336)
 LABEL_LEN=48
 
 # Non-tuned fixed bits

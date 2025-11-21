@@ -8,11 +8,11 @@ export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 model_name="${1:-Trainable_t}"
 
 ROOT="./dataset/ETT-small"
-DATA_FILE="ETTh2.csv"
-DATA_NAME="ETTh2"
+DATA_FILE="ETTh1.csv"
+DATA_NAME="ETTh1"
 
 FEATURES="M"
-SEQ_LEN=96
+SEQ_LENS=(96 192 336 720)
 LABEL_LEN=48
 
 # Non-tuned fixed bits
@@ -22,7 +22,7 @@ ENC_IN=7
 DEC_IN=7
 C_OUT=7
 
-TRAIN_EPOCHS=50
+TRAIN_EPOCHS=100
 PATIENCE=10
 
 # --------- Prediction lengths (standard 4) ---------
@@ -60,41 +60,43 @@ for cfg in "${CONFIGS[@]}"; do
   fi
 
   for PRED_LEN in "${PRED_LENS[@]}"; do
-    GROUP="${DATA_NAME}_S${SEQ_LEN}_P${PRED_LEN}_top7"
-    MODEL_ID="${DATA_NAME}_${SEQ_LEN}_${PRED_LEN}_el${E_LAYERS}_dm${D_MODEL}_dff${D_FF}_do${DROPOUT}_lr${LEARNING_RATE}_h${N_HEADS}"
+    for SEQ_LEN in "${SEQ_LENS[@]}"; do
+      GROUP="${DATA_NAME}_S${SEQ_LEN}_P${PRED_LEN}_top7"
+      MODEL_ID="New_run_${DATA_NAME}_${SEQ_LEN}_${PRED_LEN}_el${E_LAYERS}_dm${D_MODEL}_dff${D_FF}_do${DROPOUT}_lr${LEARNING_RATE}_h${N_HEADS}"
 
-    echo "============================================================"
-    echo "▶️  cfg#${cfg_idx}  PRED_LEN=${PRED_LEN} | WANDB_GROUP=${GROUP}"
-    echo "→ Running ${MODEL_ID}"
-    echo "============================================================"
+      echo "============================================================"
+      echo "▶️  cfg#${cfg_idx}  PRED_LEN=${PRED_LEN} | WANDB_GROUP=${GROUP}"
+      echo "→ Running ${MODEL_ID}"
+      echo "============================================================"
 
-    WANDB_GROUP="${GROUP}" python -u run.py \
-      --task_name long_term_forecast \
-      --is_training 1 \
-      --root_path "${ROOT}/" \
-      --data_path "${DATA_FILE}" \
-      --model_id "${MODEL_ID}" \
-      --model "${model_name}" \
-      --data "${DATA_NAME}" \
-      --features "${FEATURES}" \
-      --seq_len ${SEQ_LEN} \
-      --label_len ${LABEL_LEN} \
-      --pred_len ${PRED_LEN} \
-      --e_layers ${E_LAYERS} \
-      --d_layers ${D_LAYERS} \
-      --factor ${FACTOR} \
-      --enc_in ${ENC_IN} \
-      --dec_in ${DEC_IN} \
-      --c_out ${C_OUT} \
-      --d_model ${D_MODEL} \
-      --d_ff ${D_FF} \
-      --des "top7_predlen_sweep" \
-      --itr 1 \
-      --train_epochs ${TRAIN_EPOCHS} \
-      --dropout ${DROPOUT} \
-      --patience ${PATIENCE} \
-      --learning_rate ${LEARNING_RATE} \
-      --n_heads ${N_HEADS}
+      WANDB_GROUP="${GROUP}" python -u run.py \
+        --task_name long_term_forecast \
+        --is_training 1 \
+        --root_path "${ROOT}/" \
+        --data_path "${DATA_FILE}" \
+        --model_id "${MODEL_ID}" \
+        --model "${model_name}" \
+        --data "${DATA_NAME}" \
+        --features "${FEATURES}" \
+        --seq_len ${SEQ_LEN} \
+        --label_len ${LABEL_LEN} \
+        --pred_len ${PRED_LEN} \
+        --e_layers ${E_LAYERS} \
+        --d_layers ${D_LAYERS} \
+        --factor ${FACTOR} \
+        --enc_in ${ENC_IN} \
+        --dec_in ${DEC_IN} \
+        --c_out ${C_OUT} \
+        --d_model ${D_MODEL} \
+        --d_ff ${D_FF} \
+        --des "top7_predlen_sweep" \
+        --itr 1 \
+        --train_epochs ${TRAIN_EPOCHS} \
+        --dropout ${DROPOUT} \
+        --patience ${PATIENCE} \
+        --learning_rate ${LEARNING_RATE} \
+        --n_heads ${N_HEADS}
+    done
   done
 done
 

@@ -87,6 +87,20 @@ if __name__ == '__main__':
     parser.add_argument('--rope_trainable', action='store_true', default=False,
                     help='If set, use trainable RoPE phases in Trainable_t2')
 
+    parser.add_argument(
+        '--share_mode',
+        type=str,
+        default='per_head_block',
+        choices=['global', 'per_head', 'per_block', 'per_head_block'],
+        help='SyPE parameter sharing: global | per_head | per_block | per_head_block'
+    )
+    parser.add_argument(
+        '--nonrope_init',
+        action='store_true',
+        default=False,
+        help='If set, use non-RoPE random log-spectrum initialization for SyPE'
+    )
+
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')

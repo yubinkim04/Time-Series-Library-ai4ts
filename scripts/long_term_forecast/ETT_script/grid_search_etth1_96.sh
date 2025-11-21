@@ -5,7 +5,7 @@ set -Eeuo pipefail
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
 # --------- Static config ---------
-model_name="${1:-Trainable_t}"
+model_name="${1:-Trainable_t2}"
 
 ROOT="./dataset/ETT-small"
 DATA_FILE="ETTh1.csv"
@@ -26,12 +26,12 @@ PATIENCE=10
 
 # --------- Search space ---------
 # Tuning: e_layers, d_model, d_ff, dropout, learning_rate, n_heads
-ELAYERS=(6 5)
-DMODEL=(8 16 32 64)
-DFF=(32 64 128 256)
-DROPOUT=(0.1 0.3 0.5 0.9)
-LEARNING_RATE=(0.00001 0.00005 0.0001 0.0002 0.0005)
-N_HEADS=(1 2 4 8 16)
+ELAYERS=(1 2)
+DMODEL=(64 32 16 8)
+DFF=(256 128 64 32)
+DROPOUT=(0.5 0.3 0.1)
+LEARNING_RATE=(0.0005 0.0002 0.0001 0.00005 0.00001 )
+N_HEADS=(16 8 4 2 1)
 
 # --------- Pred lengths to sweep ---------
 PRED_LENS=(96)
