@@ -100,6 +100,24 @@ if __name__ == '__main__':
         default=False,
         help='If set, use non-RoPE random log-spectrum initialization for SyPE'
     )
+    parser.add_argument(
+        '--nonrope_log_mean',
+        type=float,
+        default=-3.0,
+        help='Mean of log-spectrum for non-RoPE initialization (if --nonrope_init is set)'
+    )
+    parser.add_argument(
+        '--nonrope_log_std',
+        type=float,
+        default=0.02,
+        help='Std of log-spectrum for non-RoPE initialization (if --nonrope_init is set)'
+    )
+    parser.add_argument(
+        '--nonrope_rho_std',
+        type=float,
+        default=0.02,
+        help='Std of rho for non-RoPE initialization (if --nonrope_init is set)'
+    )
 
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')

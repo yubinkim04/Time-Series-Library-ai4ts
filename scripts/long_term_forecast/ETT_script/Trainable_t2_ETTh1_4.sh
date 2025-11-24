@@ -36,9 +36,6 @@ CONFIGS=(
 # --------- SymplecticPE (SyPE) hyperparameters to sweep ---------
 # share_mode ∈ {global, per_head, per_block, per_head_block}
 SHARE_MODES=(
-  "per_head_block",
-  "per_head",
-  "per_block",
   "global"
 )
 

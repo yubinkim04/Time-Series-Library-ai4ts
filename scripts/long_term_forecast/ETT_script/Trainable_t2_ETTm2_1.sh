@@ -8,11 +8,11 @@ export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 model_name="${1:-Trainable_t2}"
 
 ROOT="./dataset/ETT-small"
-DATA_FILE="ETTh1.csv"
-DATA_NAME="ETTh1"
+DATA_FILE="ETTm2.csv"
+DATA_NAME="ETTm2"
 
 FEATURES="M"
-SEQ_LENS=(192 336 720)
+SEQ_LENS=(336)
 LABEL_LEN=48
 
 # Non-tuned fixed bits
@@ -26,7 +26,7 @@ TRAIN_EPOCHS=100
 PATIENCE=10
 
 # --------- Prediction lengths (standard 4) ---------
-PRED_LENS=(96 192 336 720)
+PRED_LENS=(720)
 
 # --------- Top-7 configs: el dm dff dropout lr n_heads ---------
 CONFIGS=(
@@ -36,34 +36,17 @@ CONFIGS=(
 # --------- SymplecticPE (SyPE) hyperparameters to sweep ---------
 # share_mode ∈ {global, per_head, per_block, per_head_block}
 SHARE_MODES=(
-  "per_head_block",
-  "per_head",
-  "per_block",
-  "global"
+  "per_head_block"
 )
 
-# non-RoPE base configs A, B, D, F:
-# A: -3.0  0.02 0.02
-# B: -3.5  0.05 0.02
-# D: -3.0  0.30 0.05
-# F: -2.5  0.30 0.05
-NONROPE_CONFIGS=(
-  "-3.0 0.02 0.02"
-  "-3.5 0.05 0.02"
-  "-3.0 0.30 0.05"
-  "-2.5 0.30 0.05"
-)
+# nonrope_init: 0 = use RoPE-like base, 1 = use non-RoPE random base
+NONROPE_INITS=(1)
 
 echo "Starting top-7 sweep for ${DATA_NAME} on model=${model_name}"
 echo "Pred lens: ${PRED_LENS[*]}"
 echo "SyPE share_modes: ${SHARE_MODES[*]}"
-echo "SyPE nonrope configs (log_mean, log_std, rho_std):"
-for cfg in "${NONROPE_CONFIGS[@]}"; do
-  echo "  ${cfg}"
-done
-
-NONROPE_CFG_COUNT=${#NONROPE_CONFIGS[@]}
-echo "Total runs planned (upper bound): $(( ${#PRED_LENS[@]} * ${#CONFIGS[@]} * ${#SHARE_MODES[@]} * ${NONROPE_CFG_COUNT} ))"
+echo "SyPE nonrope_init flags: ${NONROPE_INITS[*]}"
+echo "Total runs planned (upper bound): $(( ${#PRED_LENS[@]} * ${#CONFIGS[@]} * ${#SHARE_MODES[@]} * ${#NONROPE_INITS[@]} ))"
 
 cfg_idx=0
 for cfg in "${CONFIGS[@]}"; do
@@ -85,28 +68,22 @@ for cfg in "${CONFIGS[@]}"; do
   for SEQ_LEN in "${SEQ_LENS[@]}"; do
     for PRED_LEN in "${PRED_LENS[@]}"; do
       for SHARE_MODE in "${SHARE_MODES[@]}"; do
-        for NONROPE_CFG in "${NONROPE_CONFIGS[@]}"; do
+        for NONROPE in "${NONROPE_INITS[@]}"; do
 
-          # Parse non-RoPE hyperparameters: log_mean log_std rho_std
-          read -r NONROPE_LOG_MEAN NONROPE_LOG_STD NONROPE_RHO_STD <<< "${NONROPE_CFG}"
-
-          # Build extra args for SyPE
+          # Build extra args for SyPE (matches run.py: --share_mode, --nonrope_init)
           EXTRA_ARGS=(
             --share_mode "${SHARE_MODE}"
-            --nonrope_init
-            --nonrope_log_mean "${NONROPE_LOG_MEAN}"
-            --nonrope_log_std "${NONROPE_LOG_STD}"
-            --nonrope_rho_std "${NONROPE_RHO_STD}"
           )
+          if [[ "${NONROPE}" -eq 1 ]]; then
+            EXTRA_ARGS+=(--nonrope_init)
+          fi
 
-          # Use values themselves in group/model names
-          GROUP="${DATA_NAME}_S${SEQ_LEN}_P${PRED_LEN}_top7_sype-${SHARE_MODE}_nr_m${NONROPE_LOG_MEAN}_s${NONROPE_LOG_STD}_r${NONROPE_RHO_STD}"
-          MODEL_ID="New_run_${DATA_NAME}_S${SEQ_LEN}_P${PRED_LEN}_el${E_LAYERS}_dm${D_MODEL}_dff${D_FF}_do${DROPOUT}_lr${LEARNING_RATE}_h${N_HEADS}_sype-${SHARE_MODE}_nr_m${NONROPE_LOG_MEAN}_s${NONROPE_LOG_STD}_r${NONROPE_RHO_STD}"
+          GROUP="${DATA_NAME}_S${SEQ_LEN}_P${PRED_LEN}_top7_sype-${SHARE_MODE}_nr${NONROPE}"
+          MODEL_ID="New_run_${DATA_NAME}_S${SEQ_LEN}_P${PRED_LEN}_el${E_LAYERS}_dm${D_MODEL}_dff${D_FF}_do${DROPOUT}_lr${LEARNING_RATE}_h${N_HEADS}_sype-${SHARE_MODE}_nr${NONROPE}"
 
           echo "============================================================"
           echo "▶️  cfg#${cfg_idx}  PRED_LEN=${PRED_LEN} | SEQ_LEN=${SEQ_LEN}"
-          echo "    SyPE: share_mode=${SHARE_MODE}, nonrope_init=1"
-          echo "    SyPE nonrope: log_mean=${NONROPE_LOG_MEAN}, log_std=${NONROPE_LOG_STD}, rho_std=${NONROPE_RHO_STD}"
+          echo "    SyPE: share_mode=${SHARE_MODE}, nonrope_init=${NONROPE}"
           echo "    WANDB_GROUP=${GROUP}"
           echo "→ Running ${MODEL_ID}"
           echo "============================================================"

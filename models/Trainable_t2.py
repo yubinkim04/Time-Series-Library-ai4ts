@@ -254,6 +254,8 @@ class CausalSelfAttention(nn.Module):
         self.n_embd = config.n_embd
         self.dropout = config.dropout
         self.is_causal = config.is_causal
+
+        self.fix_rope_base_setting = not getattr(config, "nonrope_init", False)
  
         # --- replaced RotaryPositionalEmbedding with SymplecticPE ---
         self.rope = SymplecticPE(
@@ -262,13 +264,13 @@ class CausalSelfAttention(nn.Module):
             base=10_000,
             learnable=True,
             share_mode=getattr(config, "share_mode", "per_head_block"),
-            fix_rope_base=True,
+            fix_rope_base=self.fix_rope_base_setting,
             apply_J_for_keys_by_default=True,
             nonrope_init=getattr(config, "nonrope_init", False),
             # if you later expose these via args, pull from config the same way:
-            # nonrope_log_mean=getattr(config, "nonrope_log_mean", -3.0),
-            # nonrope_log_std=getattr(config, "nonrope_log_std", 0.02),
-            # nonrope_rho_std=getattr(config, "nonrope_rho_std", 0.02),
+            nonrope_log_mean=getattr(config, "nonrope_log_mean", -3.0),
+            nonrope_log_std=getattr(config, "nonrope_log_std", 0.02),
+            nonrope_rho_std=getattr(config, "nonrope_rho_std", 0.02),
             learnable_clock=True,
         )
         # ------------------------------------------------------------
@@ -362,6 +364,7 @@ class Transformer(nn.Module):
 class Model(nn.Module):
     def __init__(self, configs):
         super().__init__()
+        self.fix_rope_base_setting = not getattr(configs, "nonrope_init", False)
         transformer_config = SimpleNamespace(
             block_size=1024,
             n_layer=configs.e_layers,
@@ -374,7 +377,14 @@ class Model(nn.Module):
             d_ff=configs.d_ff,
             # >>> NEW: SyPE config coming from run.py / args <<<
             share_mode=getattr(configs, "share_mode", "per_head_block"),
-            nonrope_init=getattr(configs, "nonrope_init", False)
+            nonrope_init=getattr(configs, "nonrope_init", False),
+            # fix_rope_base should be the opposite of nonrope_init
+            fix_rope_base=self.fix_rope_base_setting,
+
+            # new configs for nonrope_log_mean, nonrope_log_std, nonrope_rho_std
+            nonrope_log_mean=getattr(configs, "nonrope_log_mean", -3.0),
+            nonrope_log_std=getattr(configs, "nonrope_log_std", 0.02),
+            nonrope_rho_std=getattr(configs, "nonrope_rho_std", 0.02),
         )
         self.model = Transformer(transformer_config)
         #self.forecast_layer = nn.Linear(configs.seq_len, configs.pred_len)
